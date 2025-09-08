@@ -28,8 +28,8 @@ h3{ margin:16px 0 8px 0 }
 }
 .card:hover{ transform:translateY(-3px) }
 
-.grid-2{
-  display:grid; grid-template-columns:1fr auto; gap:10px; align-items:center;
+.grid-3{
+  display:grid; grid-template-columns:2fr 1.2fr auto; gap:10px; align-items:center;
 }
 
 table{ width:100%; border-collapse:collapse; margin-top:10px; border-radius:8px; overflow:hidden }
@@ -80,5 +80,8 @@ input[type="color"]{ width:40px; height:28px; padding:0; border:none; cursor:poi
 
 .scroll-160{ max-height:160px; overflow-y:auto }
 
-/* Дополнительно: сделать pending менее яркими в календаре */
+/* pending в календаре менее яркие */
 .leave.pending{ filter:saturate(70%); opacity:.9 }
+
+/* узкие ячейки в таблице */
+.cell-narrow{ white-space:nowrap }
