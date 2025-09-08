@@ -29,29 +29,35 @@ function fullMonthsBetween(start, end){
 // храним emp.accruedMonths — сколько МЕСЯЦЕВ уже начислено.
 // При каждом рендере считаем totalMonthsWorked и добавляем (или вычитаем) дельту * 1.75.
 function accrueVacation(){
-  const now = new Date();
+  // начисление 1.75 за месяц => ~0.0575 за день
+const DAILY_RATE = 1.75 / 30.4375;
+
+function accrueVacation(){
+  const now = normalizeDate(new Date());
   let changed = false;
+
   employees.forEach(emp=>{
-    // миграция старых записей
     if(!emp.startDate){
-      // если у сотрудника ранее не было стартовой даты — начнём «с сегодня»
-      emp.startDate = new Date().toISOString().slice(0,10);
-      emp.accruedMonths = emp.accruedMonths || 0;
+      emp.startDate = now.toISOString().slice(0,10);
+      emp.accruedDays = 0;
       changed = true;
     }
-    if(typeof emp.accruedMonths !== "number") emp.accruedMonths = 0;
+    if(typeof emp.accruedDays !== "number") emp.accruedDays = 0;
 
-    const start = new Date(emp.startDate);
-    const totalMonths = fullMonthsBetween(start, now);
-    const delta = totalMonths - emp.accruedMonths;
+    const start = normalizeDate(new Date(emp.startDate));
+    const totalDays = Math.floor((now - start) / (1000*60*60*24));
+    const delta = totalDays - emp.accruedDays;
 
-    if (delta !== 0){
-      emp.days = (emp.days || 0) + 1.75 * delta; // delta может быть отрицательной при переносе даты назад
-      emp.accruedMonths = totalMonths;
+    if(delta > 0){
+      emp.days = (emp.days || 0) + delta * DAILY_RATE;
+      emp.accruedDays = totalDays;
       changed = true;
     }
   });
+
   if(changed) save();
+}
+
 }
 
 // ====== Рендеры ======
