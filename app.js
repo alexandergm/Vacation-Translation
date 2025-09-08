@@ -13,39 +13,38 @@ const $ = sel => document.querySelector(sel);
 const MS_DAY = 24*60*60*1000;
 const DAILY_RATE = 1.75 / 30.4375; // ≈ 0.0575 дня/сутки
 
+// Функция для сохранения данных в LocalStorage
 function save(){
   localStorage.setItem("employees", JSON.stringify(employees));
   localStorage.setItem("requests",  JSON.stringify(requests));
 }
+
+// Нормализуем дату до 00:00
 function normalizeDate(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
-function daysBetween(a, b){ // целые сутки: [a, b)
+
+// Считаем разницу в днях между двумя датами
+function daysBetween(a, b){ 
   return Math.max(0, Math.floor((normalizeDate(b) - normalizeDate(a)) / MS_DAY));
 }
 
 // ====== Автоначисление (ежедневно, пропорционально) ======
-// Храним emp.autoAccrued — сколько автоначислено всего с даты начала.
-// На каждом рендере считаем, сколько ДОЛЖНО быть на сегодня, и докидываем разницу в emp.days.
-const DAILY_RATE = 1.75 / 30.4375; // ≈ 0.0575 дня/сутки
-const MS_DAY = 24*60*60*1000;
-function normalizeDate(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
-function daysBetween(a, b){ return Math.max(0, Math.floor((normalizeDate(b) - normalizeDate(a)) / MS_DAY)); }
-
 function accrueDaily(){
   const today = normalizeDate(new Date());
   let changed = false;
 
-  employees.forEach(emp=>{
+  employees.forEach(emp => {
+    // Если нет стартовой даты, установим её на сегодня
     if (!emp.startDate) {
-      emp.startDate = today.toISOString().slice(0,10);
+      emp.startDate = today.toISOString().slice(0, 10);
     }
     if (typeof emp.autoAccrued !== "number") {
-      emp.autoAccrued = 0;
+      emp.autoAccrued = 0;  // Инициализация для новых сотрудников
     }
     if (typeof emp.days !== "number") {
-      emp.days = 0;
+      emp.days = 0;  // Инициализация для новых сотрудников
     }
 
-    // Сколько ДОЛЖНО быть автоначислено на сегодня с даты начала
+    // Считаем, сколько должно быть автоначислено на сегодня с даты начала
     const shouldBe = +(daysBetween(new Date(emp.startDate), today) * DAILY_RATE).toFixed(6);
 
     // Сколько ещё надо докинуть в баланс и в счётчик автоначисленного
@@ -53,7 +52,7 @@ function accrueDaily(){
 
     if (delta !== 0) {
       emp.autoAccrued = +(emp.autoAccrued + delta).toFixed(6);
-      emp.days        = +(emp.days + delta).toFixed(6);
+      emp.days = +(emp.days + delta).toFixed(6);
       changed = true;
     } else {
       // Миграционный фикс: если из-за прошлой версии days < autoAccrued — дольём разницу
@@ -68,16 +67,16 @@ function accrueDaily(){
   if (changed) save();
 }
 
-
 // ====== Рендер ======
 function render(){
-  accrueDaily();
+  accrueDaily();  // Начисляем отпускные при каждом рендере
   renderAdminEmployees();
   renderAdminRequests();
   renderEmployeeSelectAndPanel();
   renderCalendar();
 }
 
+// Рендерим таблицу сотрудников в админке
 function renderAdminEmployees(){
   const table = $("#empTable");
   table.innerHTML = `
@@ -88,19 +87,19 @@ function renderAdminEmployees(){
       <th>Цвет</th>
       <th class="cell-narrow" colspan="2">Действия</th>
     </tr>`;
-  employees.forEach(e=>{
+  employees.forEach(e => {
     table.innerHTML += `
       <tr>
         <td>${e.name}</td>
-        <td>${(e.days||0).toFixed(2)}</td>
+        <td>${(e.days || 0).toFixed(2)}</td>
         <td>
           <div class="days-input">
-            <input type="date" id="startDate_${e.id}" value="${(e.startDate||'').slice(0,10)}" />
+            <input type="date" id="startDate_${e.id}" value="${(e.startDate || '').slice(0, 10)}" />
             <button class="btn" onclick="saveStartDate(${e.id})">Сохранить</button>
           </div>
-          <div style="font-size:12px;opacity:.7">Автоначислено: ${(e.autoAccrued||0).toFixed(2)} дн.</div>
+          <div style="font-size:12px;opacity:.7">Автоначислено: ${(e.autoAccrued || 0).toFixed(2)} дн.</div>
         </td>
-        <td><input type="color" value="${e.color||'#999'}" onchange="changeColor(${e.id}, this.value)" /></td>
+        <td><input type="color" value="${e.color || '#999'}" onchange="changeColor(${e.id}, this.value)" /></td>
         <td class="cell-narrow">
           <div class="days-input">
             <input type="number" step="0.25" id="addDaysInput_${e.id}" placeholder="+дни" />
@@ -113,13 +112,14 @@ function renderAdminEmployees(){
   });
 }
 
+// Рендерим заявки в админке
 function renderAdminRequests(){
   const filter = $("#reqFilter")?.value || "all";
   const table = $("#reqTable");
   table.innerHTML = "<tr><th>Сотрудник</th><th>Даты</th><th>Статус</th><th></th></tr>";
   requests
     .filter(r => filter === "all" ? true : r.status === filter)
-    .forEach(r=>{
+    .forEach(r => {
       table.innerHTML += `
         <tr>
           <td>${r.name}</td>
@@ -141,26 +141,28 @@ function renderAdminRequests(){
     });
 }
 
+// Рендерим таблицу заявок сотрудника
 function renderEmployeeSelectAndPanel(){
   const sel = $("#empSelect");
   sel.innerHTML = "";
-  employees.forEach(e=>{
+  employees.forEach(e => {
     const opt = document.createElement("option");
     opt.value = e.id;
-    opt.textContent = `${e.name} (${(e.days||0).toFixed(2)}д.)`;
+    opt.textContent = `${e.name} (${(e.days || 0).toFixed(2)}д.)`;
     sel.appendChild(opt);
   });
   renderEmployeeRequests();
 }
 
+// Рендерим заявки сотрудника
 function renderEmployeeRequests(){
   const empId = parseInt($("#empSelect").value || "0");
-  const emp   = employees.find(e=>e.id===empId);
-  $("#empDays").textContent = emp ? `Доступно отпускных дней: ${(emp.days||0).toFixed(2)}` : "";
+  const emp   = employees.find(e => e.id === empId);
+  $("#empDays").textContent = emp ? `Доступно отпускных дней: ${(emp.days || 0).toFixed(2)}` : "";
 
   const table = $("#empReqTable");
   table.innerHTML = "<tr><th>Даты</th><th>Статус</th></tr>";
-  requests.filter(r=>r.empId===empId).forEach(r=>{
+  requests.filter(r => r.empId === empId).forEach(r => {
     table.innerHTML += `
       <tr>
         <td>${r.from} → ${r.to}</td>
@@ -170,32 +172,33 @@ function renderEmployeeRequests(){
   });
 }
 
+// Рендерим календарь
 function renderCalendar(){
   const cal  = $("#calendar");
   const year = currentYear, month = currentMonth;
   cal.innerHTML = "";
 
-  const dim = new Date(year, month+1, 0).getDate();
+  const dim = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay(); // 0=вс
-  $("#calendarTitle").textContent = new Date(year,month).toLocaleString("ru",{month:"long",year:"numeric"});
+  $("#calendarTitle").textContent = new Date(year, month).toLocaleString("ru", { month: "long", year: "numeric" });
 
   let start = (firstDay + 6) % 7; // понедельник первым
-  for(let i=0;i<start;i++) cal.innerHTML += `<div class="day"></div>`;
+  for (let i = 0; i < start; i++) cal.innerHTML += `<div class="day"></div>`;
 
-  for(let d=1; d<=dim; d++){
+  for (let d = 1; d <= dim; d++) {
     const dayEl = document.createElement("div");
     dayEl.className = "day";
     dayEl.innerHTML = `<strong>${d}</strong>`;
 
-    const cur = normalizeDate(new Date(year,month,d));
+    const cur = normalizeDate(new Date(year, month, d));
 
     requests
-      .filter(r=>r.status!=="rejected")
-      .forEach(r=>{
+      .filter(r => r.status !== "rejected")
+      .forEach(r => {
         const from = normalizeDate(new Date(r.from));
         const to   = normalizeDate(new Date(r.to));
-        if(cur>=from && cur<=to){
-          const emp   = employees.find(e=>e.id===r.empId);
+        if (cur >= from && cur <= to) {
+          const emp   = employees.find(e => e.id === r.empId);
           const color = emp?.color || "#999";
           const pendingClass = r.status === "pending" ? "pending" : "";
           dayEl.innerHTML += `
@@ -214,15 +217,15 @@ function renderCalendar(){
 
 // ====== Действия ======
 function toggleAdmin(){
-  if(!adminOpen){
+  if (!adminOpen) {
     const pass = prompt("Введите пароль для входа в админку:");
-    if(pass === "1234"){
+    if (pass === "1234") {
       $("#adminPanel").style.display = "block";
       adminOpen = true;
-    }else{
+    } else {
       alert("Неверный пароль!");
     }
-  }else{
+  } else {
     $("#adminPanel").style.display = "none";
     adminOpen = false;
   }
@@ -230,18 +233,16 @@ function toggleAdmin(){
 
 function addEmployee(){
   const name = ($("#empName").value || "").trim();
-  const startDate = $("#empStartDate").value || new Date().toISOString().slice(0,10);
-  if(!name) return;
+  const startDate = $("#empStartDate").value || new Date().toISOString().slice(0, 10);
+  if (!name) return;
 
   const color = COLORS[employees.length % COLORS.length];
-  // autoAccrued и days стартуют с 0 — при первом render() accrueDaily() проставит автоначисленное "как должно быть",
-  // НЕ изменяя баланс задним числом (инициализирует autoAccrued, но не тронет days).
   employees.push({
     id: Date.now(),
     name,
     days: 0,
     startDate,
-    autoAccrued: undefined,
+    autoAccrued: 0,
     color
   });
 
@@ -251,14 +252,14 @@ function addEmployee(){
 }
 
 function saveStartDate(id){
-  const input = document.getElementById("startDate_"+id);
+  const input = document.getElementById("startDate_" + id);
   const newStart = input.value;
-  const emp = employees.find(e=>e.id===id);
-  if(!emp) return;
+  const emp = employees.find(e => e.id === id);
+  if (!emp) return;
 
   const today = new Date();
   const shouldBe = daysBetween(new Date(newStart), today) * DAILY_RATE;
-  const oldAuto  = emp.autoAccrued || 0;
+  const oldAuto = emp.autoAccrued || 0;
   const delta = +(shouldBe - oldAuto).toFixed(6);
 
   emp.startDate = newStart;
@@ -269,53 +270,53 @@ function saveStartDate(id){
 }
 
 function addDays(id){
-  const input = document.getElementById("addDaysInput_"+id);
+  const input = document.getElementById("addDaysInput_" + id);
   const val = parseFloat(input.value);
-  if(isNaN(val)) return;
-  const emp = employees.find(e=>e.id===id);
-  emp.days = (emp.days||0) + val;
+  if (isNaN(val)) return;
+  const emp = employees.find(e => e.id === id);
+  emp.days = (emp.days || 0) + val;
   input.value = "";
   save(); render();
 }
 
 function changeColor(id, color){
-  const emp = employees.find(e=>e.id===id);
-  if(emp){ emp.color = color; save(); render(); }
+  const emp = employees.find(e => e.id === id);
+  if (emp) { emp.color = color; save(); render(); }
 }
 
 function deleteEmployee(id){
-  if(!confirm("Удалить сотрудника?")) return;
-  employees = employees.filter(e=>e.id!==id);
-  requests  = requests.filter(r=>r.empId!==id);
+  if (!confirm("Удалить сотрудника?")) return;
+  employees = employees.filter(e => e.id !== id);
+  requests = requests.filter(r => r.empId !== id);
   save(); render();
 }
 
 function makeRequest(){
   const empId = parseInt($("#empSelect").value || "0");
-  const emp   = employees.find(e=>e.id===empId);
-  const from  = $("#fromDate").value;
-  const to    = $("#toDate").value;
+  const emp = employees.find(e => e.id === empId);
+  const from = $("#fromDate").value;
+  const to = $("#toDate").value;
 
-  if(!emp){ alert("Выберите сотрудника"); return; }
-  if(!from || !to){ alert("Укажи даты!"); return; }
+  if (!emp) { alert("Выберите сотрудника"); return; }
+  if (!from || !to) { alert("Укажи даты!"); return; }
 
-  const days = (new Date(to) - new Date(from))/(1000*60*60*24) + 1;
-  if(days <= 0){ alert("Неверные даты"); return; }
-  if(days > (emp.days || 0)){ alert(`У ${emp.name} есть только ${(emp.days||0).toFixed(2)} дней`); return; }
+  const days = (new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24) + 1;
+  if (days <= 0) { alert("Неверные даты"); return; }
+  if (days > (emp.days || 0)) { alert(`У ${emp.name} есть только ${(emp.days || 0).toFixed(2)} дней`); return; }
 
   requests.push({ id: Date.now(), empId, name: emp.name, from, to, days, status: "pending" });
   save(); render();
 }
 
 function updateStatus(id, status){
-  const req = requests.find(r=>r.id===id);
-  const emp = employees.find(e=>e.id===req.empId);
+  const req = requests.find(r => r.id === id);
+  const emp = employees.find(e => e.id === req.empId);
 
-  if(req.status === "approved" && status !== "approved"){
-    emp.days = (emp.days||0) + req.days; // вернуть дни при отмене approve
+  if (req.status === "approved" && status !== "approved") {
+    emp.days = (emp.days || 0) + req.days; // вернуть дни при отмене approve
   }
-  if(req.status !== "approved" && status === "approved"){
-    emp.days = (emp.days||0) - req.days; // списать при approve
+  if (req.status !== "approved" && status === "approved") {
+    emp.days = (emp.days || 0) - req.days; // списать при approve
   }
 
   req.status = status;
@@ -323,20 +324,20 @@ function updateStatus(id, status){
 }
 
 // ====== События ======
-document.addEventListener("DOMContentLoaded", ()=>{
+document.addEventListener("DOMContentLoaded", () => {
   $("#btnAdmin").addEventListener("click", toggleAdmin);
   $("#btnAddEmp").addEventListener("click", addEmployee);
   $("#btnMakeReq").addEventListener("click", makeRequest);
-  $("#btnPrev").addEventListener("click", ()=>{ currentMonth--; if(currentMonth<0){currentMonth=11; currentYear--;} renderCalendar(); });
-  $("#btnNext").addEventListener("click", ()=>{ currentMonth++; if(currentMonth>11){currentMonth=0; currentYear++;} renderCalendar(); });
+  $("#btnPrev").addEventListener("click", () => { currentMonth--; if (currentMonth < 0) { currentMonth = 11; currentYear--; } renderCalendar(); });
+  $("#btnNext").addEventListener("click", () => { currentMonth++; if (currentMonth > 11) { currentMonth = 0; currentYear++; } renderCalendar(); });
 
   $("#reqFilter").addEventListener("change", render);
   $("#empSelect").addEventListener("change", renderEmployeeRequests);
 
   // дефолтная дата начала — сегодня
-  const today = new Date().toISOString().slice(0,10);
+  const today = new Date().toISOString().slice(0, 10);
   const startInput = document.getElementById("empStartDate");
-  if(startInput && !startInput.value) startInput.value = today;
+  if (startInput && !startInput.value) startInput.value = today;
 
   render();
 });
