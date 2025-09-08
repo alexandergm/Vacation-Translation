@@ -1,75 +1,81 @@
 // ====== Состояние ======
 let employees = JSON.parse(localStorage.getItem("employees") || "[]");
-let requests  = JSON.parse(localStorage.getItem("requests")  || "[]");
+let requests = JSON.parse(localStorage.getItem("requests") || "[]");
 
 let adminOpen = false;
-let currentYear  = new Date().getFullYear();
+let currentYear = new Date().getFullYear();
 let currentMonth = new Date().getMonth();
 
-const COLORS = ["#6C63FF","#FF6584","#4CAF50","#FF9800","#00BCD4","#9C27B0","#795548"];
+const COLORS = ["#6C63FF", "#FF6584", "#4CAF50", "#FF9800", "#00BCD4", "#9C27B0", "#795548"];
 
 // ====== Утилиты ======
 const $ = sel => document.querySelector(sel);
-const MS_DAY = 24*60*60*1000;
+
+// Размер одного дня (в миллисекундах)
+const MS_DAY = 24 * 60 * 60 * 1000;
+
+// Ставка начисления отпускных (по дням)
 const DAILY_RATE = 1.75 / 30.4375; // ≈ 0.0575 дня/сутки
 
-// Функция для сохранения данных в LocalStorage
-function save(){
+// Сохраняем данные в localStorage
+function save() {
   localStorage.setItem("employees", JSON.stringify(employees));
-  localStorage.setItem("requests",  JSON.stringify(requests));
+  localStorage.setItem("requests", JSON.stringify(requests));
 }
 
 // Нормализуем дату до 00:00
-function normalizeDate(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+function normalizeDate(d) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
 
 // Считаем разницу в днях между двумя датами
-function daysBetween(a, b){ 
+function daysBetween(a, b) {
   return Math.max(0, Math.floor((normalizeDate(b) - normalizeDate(a)) / MS_DAY));
 }
 
-// ====== Автоначисление (ежедневно, пропорционально) ======
-function accrueDaily(){
+// ====== Автоначисление отпускных ======
+// Начисление отпускных на каждый день
+function accrueDaily() {
   const today = normalizeDate(new Date());
   let changed = false;
 
+  // Проходим по всем сотрудникам
   employees.forEach(emp => {
-    // Если нет стартовой даты, установим её на сегодня
+    // Если нет стартовой даты, устанавливаем её на сегодняшний день
     if (!emp.startDate) {
       emp.startDate = today.toISOString().slice(0, 10);
     }
+
     if (typeof emp.autoAccrued !== "number") {
       emp.autoAccrued = 0;  // Инициализация для новых сотрудников
     }
+
     if (typeof emp.days !== "number") {
       emp.days = 0;  // Инициализация для новых сотрудников
     }
 
-    // Считаем, сколько должно быть автоначислено на сегодня с даты начала
+    // Считаем, сколько дней прошло с даты начала работы
     const shouldBe = +(daysBetween(new Date(emp.startDate), today) * DAILY_RATE).toFixed(6);
 
-    // Сколько ещё надо докинуть в баланс и в счётчик автоначисленного
+    // Сколько нужно добавить в баланс
     const delta = +(shouldBe - emp.autoAccrued).toFixed(6);
 
+    // Если нужно добавить отпускные, делаем это
     if (delta !== 0) {
       emp.autoAccrued = +(emp.autoAccrued + delta).toFixed(6);
       emp.days = +(emp.days + delta).toFixed(6);
       changed = true;
-    } else {
-      // Миграционный фикс: если из-за прошлой версии days < autoAccrued — дольём разницу
-      if (emp.days + 1e-6 < emp.autoAccrued) {
-        const fix = +(emp.autoAccrued - emp.days).toFixed(6);
-        emp.days = +(emp.days + fix).toFixed(6);
-        changed = true;
-      }
     }
   });
 
+  // Сохраняем изменения, если они были
   if (changed) save();
 }
 
 // ====== Рендер ======
-function render(){
-  accrueDaily();  // Начисляем отпускные при каждом рендере
+// Главная функция рендера
+function render() {
+  accrueDaily(); // Начисляем отпускные при каждом рендере
   renderAdminEmployees();
   renderAdminRequests();
   renderEmployeeSelectAndPanel();
@@ -77,7 +83,7 @@ function render(){
 }
 
 // Рендерим таблицу сотрудников в админке
-function renderAdminEmployees(){
+function renderAdminEmployees() {
   const table = $("#empTable");
   table.innerHTML = `
     <tr>
@@ -113,7 +119,7 @@ function renderAdminEmployees(){
 }
 
 // Рендерим заявки в админке
-function renderAdminRequests(){
+function renderAdminRequests() {
   const filter = $("#reqFilter")?.value || "all";
   const table = $("#reqTable");
   table.innerHTML = "<tr><th>Сотрудник</th><th>Даты</th><th>Статус</th><th></th></tr>";
@@ -142,7 +148,7 @@ function renderAdminRequests(){
 }
 
 // Рендерим таблицу заявок сотрудника
-function renderEmployeeSelectAndPanel(){
+function renderEmployeeSelectAndPanel() {
   const sel = $("#empSelect");
   sel.innerHTML = "";
   employees.forEach(e => {
@@ -155,9 +161,9 @@ function renderEmployeeSelectAndPanel(){
 }
 
 // Рендерим заявки сотрудника
-function renderEmployeeRequests(){
+function renderEmployeeRequests() {
   const empId = parseInt($("#empSelect").value || "0");
-  const emp   = employees.find(e => e.id === empId);
+  const emp = employees.find(e => e.id === empId);
   $("#empDays").textContent = emp ? `Доступно отпускных дней: ${(emp.days || 0).toFixed(2)}` : "";
 
   const table = $("#empReqTable");
@@ -173,8 +179,8 @@ function renderEmployeeRequests(){
 }
 
 // Рендерим календарь
-function renderCalendar(){
-  const cal  = $("#calendar");
+function renderCalendar() {
+  const cal = $("#calendar");
   const year = currentYear, month = currentMonth;
   cal.innerHTML = "";
 
@@ -196,9 +202,9 @@ function renderCalendar(){
       .filter(r => r.status !== "rejected")
       .forEach(r => {
         const from = normalizeDate(new Date(r.from));
-        const to   = normalizeDate(new Date(r.to));
+        const to = normalizeDate(new Date(r.to));
         if (cur >= from && cur <= to) {
-          const emp   = employees.find(e => e.id === r.empId);
+          const emp = employees.find(e => e.id === r.empId);
           const color = emp?.color || "#999";
           const pendingClass = r.status === "pending" ? "pending" : "";
           dayEl.innerHTML += `
@@ -216,7 +222,8 @@ function renderCalendar(){
 }
 
 // ====== Действия ======
-function toggleAdmin(){
+// Функция для отображения админки
+function toggleAdmin() {
   if (!adminOpen) {
     const pass = prompt("Введите пароль для входа в админку:");
     if (pass === "1234") {
@@ -231,7 +238,8 @@ function toggleAdmin(){
   }
 }
 
-function addEmployee(){
+// Функция добавления нового сотрудника
+function addEmployee() {
   const name = ($("#empName").value || "").trim();
   const startDate = $("#empStartDate").value || new Date().toISOString().slice(0, 10);
   if (!name) return;
@@ -242,7 +250,7 @@ function addEmployee(){
     name,
     days: 0,
     startDate,
-    autoAccrued: 0,
+    autoAccrued: 0,  // Инициализируем для нового сотрудника
     color
   });
 
@@ -251,7 +259,8 @@ function addEmployee(){
   save(); render();
 }
 
-function saveStartDate(id){
+// Функция сохранения даты начала работы сотрудника
+function saveStartDate(id) {
   const input = document.getElementById("startDate_" + id);
   const newStart = input.value;
   const emp = employees.find(e => e.id === id);
@@ -269,7 +278,8 @@ function saveStartDate(id){
   save(); render();
 }
 
-function addDays(id){
+// Функция добавления дней сотруднику вручную
+function addDays(id) {
   const input = document.getElementById("addDaysInput_" + id);
   const val = parseFloat(input.value);
   if (isNaN(val)) return;
@@ -279,19 +289,22 @@ function addDays(id){
   save(); render();
 }
 
-function changeColor(id, color){
+// Функция смены цвета сотрудника
+function changeColor(id, color) {
   const emp = employees.find(e => e.id === id);
   if (emp) { emp.color = color; save(); render(); }
 }
 
-function deleteEmployee(id){
+// Функция удаления сотрудника
+function deleteEmployee(id) {
   if (!confirm("Удалить сотрудника?")) return;
   employees = employees.filter(e => e.id !== id);
   requests = requests.filter(r => r.empId !== id);
   save(); render();
 }
 
-function makeRequest(){
+// Функция отправки заявки на отпуск
+function makeRequest() {
   const empId = parseInt($("#empSelect").value || "0");
   const emp = employees.find(e => e.id === empId);
   const from = $("#fromDate").value;
@@ -308,7 +321,8 @@ function makeRequest(){
   save(); render();
 }
 
-function updateStatus(id, status){
+// Функция обновления статуса заявки
+function updateStatus(id, status) {
   const req = requests.find(r => r.id === id);
   const emp = employees.find(e => e.id === req.empId);
 
