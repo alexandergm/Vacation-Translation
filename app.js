@@ -10,47 +10,44 @@ const COLORS = ["#6C63FF","#FF6584","#4CAF50","#FF9800","#00BCD4","#9C27B0","#79
 
 // ====== Утилиты ======
 const $ = sel => document.querySelector(sel);
+const MS_DAY = 24*60*60*1000;
+const DAILY_RATE = 1.75 / 30.4375; // ≈ 0.0575 дня/сутки
+
 function save(){
   localStorage.setItem("employees", JSON.stringify(employees));
   localStorage.setItem("requests",  JSON.stringify(requests));
 }
 function normalizeDate(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
-
-// Полные месяцы между датами (если день в конце ещё не достигнут — месяц не считается)
-function fullMonthsBetween(start, end){
-  let s = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-  let e = new Date(end.getFullYear(),   end.getMonth(),   end.getDate());
-  let months = (e.getFullYear()-s.getFullYear())*12 + (e.getMonth()-s.getMonth());
-  if (e.getDate() < s.getDate()) months -= 1;
-  return Math.max(0, months);
+function daysBetween(a, b){ // целые сутки: [a, b)
+  return Math.max(0, Math.floor((normalizeDate(b) - normalizeDate(a)) / MS_DAY));
 }
 
-// Ежемесячное автокапание 1.75 с даты начала работы:
-// храним emp.accruedMonths — сколько МЕСЯЦЕВ уже начислено.
-// При каждом рендере считаем totalMonthsWorked и добавляем (или вычитаем) дельту * 1.75.
-function accrueVacation(){
-  // начисление 1.75 за месяц => ~0.0575 за день
-const DAILY_RATE = 1.75 / 30.4375;
-
-function accrueVacation(){
-  const now = normalizeDate(new Date());
+// ====== Автоначисление (ежедневно, пропорционально) ======
+// Храним emp.autoAccrued — сколько автоначислено всего с даты начала.
+// На каждом рендере считаем, сколько ДОЛЖНО быть на сегодня, и докидываем разницу в emp.days.
+function accrueDaily(){
+  const today = normalizeDate(new Date());
   let changed = false;
 
   employees.forEach(emp=>{
+    // миграция старых данных
     if(!emp.startDate){
-      emp.startDate = now.toISOString().slice(0,10);
-      emp.accruedDays = 0;
-      changed = true;
+      emp.startDate = today.toISOString().slice(0,10);
     }
-    if(typeof emp.accruedDays !== "number") emp.accruedDays = 0;
+    if(typeof emp.autoAccrued !== "number"){
+      // инициализируем без изменения текущего баланса (чтобы не задним числом докидывать)
+      emp.autoAccrued = daysBetween(new Date(emp.startDate), today) * DAILY_RATE;
+      changed = true;
+      return;
+    }
 
-    const start = normalizeDate(new Date(emp.startDate));
-    const totalDays = Math.floor((now - start) / (1000*60*60*24));
-    const delta = totalDays - emp.accruedDays;
+    // рассчитываем, сколько должно быть на сегодня
+    const shouldBe = daysBetween(new Date(emp.startDate), today) * DAILY_RATE;
+    const delta = +(shouldBe - emp.autoAccrued).toFixed(6); // фикс мелких двоичных артефактов
 
-    if(delta > 0){
-      emp.days = (emp.days || 0) + delta * DAILY_RATE;
-      emp.accruedDays = totalDays;
+    if (delta !== 0){
+      emp.autoAccrued += delta;
+      emp.days = (emp.days || 0) + delta;
       changed = true;
     }
   });
@@ -58,11 +55,9 @@ function accrueVacation(){
   if(changed) save();
 }
 
-}
-
-// ====== Рендеры ======
+// ====== Рендер ======
 function render(){
-  accrueVacation();
+  accrueDaily();
   renderAdminEmployees();
   renderAdminRequests();
   renderEmployeeSelectAndPanel();
@@ -89,7 +84,7 @@ function renderAdminEmployees(){
             <input type="date" id="startDate_${e.id}" value="${(e.startDate||'').slice(0,10)}" />
             <button class="btn" onclick="saveStartDate(${e.id})">Сохранить</button>
           </div>
-          <div style="font-size:12px;opacity:.7">Начислено месяцев: ${e.accruedMonths||0}</div>
+          <div style="font-size:12px;opacity:.7">Автоначислено: ${(e.autoAccrued||0).toFixed(2)} дн.</div>
         </td>
         <td><input type="color" value="${e.color||'#999'}" onchange="changeColor(${e.id}, this.value)" /></td>
         <td class="cell-narrow">
@@ -166,14 +161,14 @@ function renderCalendar(){
   const year = currentYear, month = currentMonth;
   cal.innerHTML = "";
 
-  const daysInMonth = new Date(year, month+1, 0).getDate();
-  const firstDay    = new Date(year, month, 1).getDay(); // 0=вс
+  const dim = new Date(year, month+1, 0).getDate();
+  const firstDay = new Date(year, month, 1).getDay(); // 0=вс
   $("#calendarTitle").textContent = new Date(year,month).toLocaleString("ru",{month:"long",year:"numeric"});
 
   let start = (firstDay + 6) % 7; // понедельник первым
   for(let i=0;i<start;i++) cal.innerHTML += `<div class="day"></div>`;
 
-  for(let d=1; d<=daysInMonth; d++){
+  for(let d=1; d<=dim; d++){
     const dayEl = document.createElement("div");
     dayEl.className = "day";
     dayEl.innerHTML = `<strong>${d}</strong>`;
@@ -225,12 +220,14 @@ function addEmployee(){
   if(!name) return;
 
   const color = COLORS[employees.length % COLORS.length];
+  // autoAccrued и days стартуют с 0 — при первом render() accrueDaily() проставит автоначисленное "как должно быть",
+  // НЕ изменяя баланс задним числом (инициализирует autoAccrued, но не тронет days).
   employees.push({
     id: Date.now(),
     name,
     days: 0,
-    startDate,       // дата начала работы
-    accruedMonths: 0, // сколько месяцев уже начислено
+    startDate,
+    autoAccrued: undefined,
     color
   });
 
@@ -241,11 +238,19 @@ function addEmployee(){
 
 function saveStartDate(id){
   const input = document.getElementById("startDate_"+id);
-  const val = input.value;
+  const newStart = input.value;
   const emp = employees.find(e=>e.id===id);
   if(!emp) return;
-  emp.startDate = val;
-  // не трогаем days вручную — пересчёт произойдёт в accrueVacation через delta
+
+  const today = new Date();
+  const shouldBe = daysBetween(new Date(newStart), today) * DAILY_RATE;
+  const oldAuto  = emp.autoAccrued || 0;
+  const delta = +(shouldBe - oldAuto).toFixed(6);
+
+  emp.startDate = newStart;
+  emp.autoAccrued = shouldBe;
+  emp.days = (emp.days || 0) + delta;
+
   save(); render();
 }
 
@@ -293,10 +298,10 @@ function updateStatus(id, status){
   const emp = employees.find(e=>e.id===req.empId);
 
   if(req.status === "approved" && status !== "approved"){
-    emp.days = (emp.days||0) + req.days; // вернуть дни
+    emp.days = (emp.days||0) + req.days; // вернуть дни при отмене approve
   }
   if(req.status !== "approved" && status === "approved"){
-    emp.days = (emp.days||0) - req.days; // списать дни
+    emp.days = (emp.days||0) - req.days; // списать при approve
   }
 
   req.status = status;
@@ -305,7 +310,6 @@ function updateStatus(id, status){
 
 // ====== События ======
 document.addEventListener("DOMContentLoaded", ()=>{
-  // Кнопки
   $("#btnAdmin").addEventListener("click", toggleAdmin);
   $("#btnAddEmp").addEventListener("click", addEmployee);
   $("#btnMakeReq").addEventListener("click", makeRequest);
@@ -315,7 +319,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
   $("#reqFilter").addEventListener("change", render);
   $("#empSelect").addEventListener("change", renderEmployeeRequests);
 
-  // По умолчанию в форме создания подставим сегодня
+  // дефолтная дата начала — сегодня
   const today = new Date().toISOString().slice(0,10);
   const startInput = document.getElementById("empStartDate");
   if(startInput && !startInput.value) startInput.value = today;
@@ -323,7 +327,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
   render();
 });
 
-// Экспорт функций, которые используются в разметке (onclick)
+// Экспорт для inline-обработчиков
 window.addDays = addDays;
 window.changeColor = changeColor;
 window.deleteEmployee = deleteEmployee;
