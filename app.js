@@ -16,17 +16,38 @@ function save(){
 }
 function normalizeDate(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
 
-// Ежемесячное автокапание 1.75
+// Полные месяцы между датами (если день в конце ещё не достигнут — месяц не считается)
+function fullMonthsBetween(start, end){
+  let s = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  let e = new Date(end.getFullYear(),   end.getMonth(),   end.getDate());
+  let months = (e.getFullYear()-s.getFullYear())*12 + (e.getMonth()-s.getMonth());
+  if (e.getDate() < s.getDate()) months -= 1;
+  return Math.max(0, months);
+}
+
+// Ежемесячное автокапание 1.75 с даты начала работы:
+// храним emp.accruedMonths — сколько МЕСЯЦЕВ уже начислено.
+// При каждом рендере считаем totalMonthsWorked и добавляем (или вычитаем) дельту * 1.75.
 function accrueVacation(){
   const now = new Date();
   let changed = false;
   employees.forEach(emp=>{
-    if(!emp.lastUpdate) { emp.lastUpdate = new Date().toISOString(); changed = true; }
-    const last = new Date(emp.lastUpdate);
-    const months = (now.getFullYear()-last.getFullYear())*12 + (now.getMonth()-last.getMonth());
-    if(months > 0){
-      emp.days = (emp.days || 0) + 1.75 * months;
-      emp.lastUpdate = now.toISOString();
+    // миграция старых записей
+    if(!emp.startDate){
+      // если у сотрудника ранее не было стартовой даты — начнём «с сегодня»
+      emp.startDate = new Date().toISOString().slice(0,10);
+      emp.accruedMonths = emp.accruedMonths || 0;
+      changed = true;
+    }
+    if(typeof emp.accruedMonths !== "number") emp.accruedMonths = 0;
+
+    const start = new Date(emp.startDate);
+    const totalMonths = fullMonthsBetween(start, now);
+    const delta = totalMonths - emp.accruedMonths;
+
+    if (delta !== 0){
+      emp.days = (emp.days || 0) + 1.75 * delta; // delta может быть отрицательной при переносе даты назад
+      emp.accruedMonths = totalMonths;
       changed = true;
     }
   });
@@ -44,20 +65,34 @@ function render(){
 
 function renderAdminEmployees(){
   const table = $("#empTable");
-  table.innerHTML = "<tr><th>Имя</th><th>Дней</th><th>Цвет</th><th colspan='2'>Действия</th></tr>";
+  table.innerHTML = `
+    <tr>
+      <th>Имя</th>
+      <th>Дней</th>
+      <th>Работает с</th>
+      <th>Цвет</th>
+      <th class="cell-narrow" colspan="2">Действия</th>
+    </tr>`;
   employees.forEach(e=>{
     table.innerHTML += `
       <tr>
         <td>${e.name}</td>
         <td>${(e.days||0).toFixed(2)}</td>
-        <td><input type="color" value="${e.color||'#999'}" onchange="changeColor(${e.id}, this.value)" /></td>
         <td>
+          <div class="days-input">
+            <input type="date" id="startDate_${e.id}" value="${(e.startDate||'').slice(0,10)}" />
+            <button class="btn" onclick="saveStartDate(${e.id})">Сохранить</button>
+          </div>
+          <div style="font-size:12px;opacity:.7">Начислено месяцев: ${e.accruedMonths||0}</div>
+        </td>
+        <td><input type="color" value="${e.color||'#999'}" onchange="changeColor(${e.id}, this.value)" /></td>
+        <td class="cell-narrow">
           <div class="days-input">
             <input type="number" step="0.25" id="addDaysInput_${e.id}" placeholder="+дни" />
             <button class="btn add" onclick="addDays(${e.id})">OK</button>
           </div>
         </td>
-        <td><button class="btn delete" onclick="deleteEmployee(${e.id})">Удалить</button></td>
+        <td class="cell-narrow"><button class="btn delete" onclick="deleteEmployee(${e.id})">Удалить</button></td>
       </tr>
     `;
   });
@@ -100,7 +135,6 @@ function renderEmployeeSelectAndPanel(){
     opt.textContent = `${e.name} (${(e.days||0).toFixed(2)}д.)`;
     sel.appendChild(opt);
   });
-
   renderEmployeeRequests();
 }
 
@@ -130,7 +164,7 @@ function renderCalendar(){
   const firstDay    = new Date(year, month, 1).getDay(); // 0=вс
   $("#calendarTitle").textContent = new Date(year,month).toLocaleString("ru",{month:"long",year:"numeric"});
 
-  let start = (firstDay + 6) % 7; // сдвиг чтобы понедельник был первым
+  let start = (firstDay + 6) % 7; // понедельник первым
   for(let i=0;i<start;i++) cal.innerHTML += `<div class="day"></div>`;
 
   for(let d=1; d<=daysInMonth; d++){
@@ -181,10 +215,31 @@ function toggleAdmin(){
 
 function addEmployee(){
   const name = ($("#empName").value || "").trim();
+  const startDate = $("#empStartDate").value || new Date().toISOString().slice(0,10);
   if(!name) return;
+
   const color = COLORS[employees.length % COLORS.length];
-  employees.push({ id: Date.now(), name, days: 0, lastUpdate: new Date().toISOString(), color });
+  employees.push({
+    id: Date.now(),
+    name,
+    days: 0,
+    startDate,       // дата начала работы
+    accruedMonths: 0, // сколько месяцев уже начислено
+    color
+  });
+
   $("#empName").value = "";
+  $("#empStartDate").value = "";
+  save(); render();
+}
+
+function saveStartDate(id){
+  const input = document.getElementById("startDate_"+id);
+  const val = input.value;
+  const emp = employees.find(e=>e.id===id);
+  if(!emp) return;
+  emp.startDate = val;
+  // не трогаем days вручную — пересчёт произойдёт в accrueVacation через delta
   save(); render();
 }
 
@@ -244,7 +299,7 @@ function updateStatus(id, status){
 
 // ====== События ======
 document.addEventListener("DOMContentLoaded", ()=>{
-  // кнопки
+  // Кнопки
   $("#btnAdmin").addEventListener("click", toggleAdmin);
   $("#btnAddEmp").addEventListener("click", addEmployee);
   $("#btnMakeReq").addEventListener("click", makeRequest);
@@ -254,11 +309,17 @@ document.addEventListener("DOMContentLoaded", ()=>{
   $("#reqFilter").addEventListener("change", render);
   $("#empSelect").addEventListener("change", renderEmployeeRequests);
 
+  // По умолчанию в форме создания подставим сегодня
+  const today = new Date().toISOString().slice(0,10);
+  const startInput = document.getElementById("empStartDate");
+  if(startInput && !startInput.value) startInput.value = today;
+
   render();
 });
 
-// ====== Экспорт в глобал для onclick в шаблонах ======
+// Экспорт функций, которые используются в разметке (onclick)
 window.addDays = addDays;
 window.changeColor = changeColor;
 window.deleteEmployee = deleteEmployee;
 window.updateStatus = updateStatus;
+window.saveStartDate = saveStartDate;
