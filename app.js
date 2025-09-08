@@ -25,35 +25,49 @@ function daysBetween(a, b){ // целые сутки: [a, b)
 // ====== Автоначисление (ежедневно, пропорционально) ======
 // Храним emp.autoAccrued — сколько автоначислено всего с даты начала.
 // На каждом рендере считаем, сколько ДОЛЖНО быть на сегодня, и докидываем разницу в emp.days.
+const DAILY_RATE = 1.75 / 30.4375; // ≈ 0.0575 дня/сутки
+const MS_DAY = 24*60*60*1000;
+function normalizeDate(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+function daysBetween(a, b){ return Math.max(0, Math.floor((normalizeDate(b) - normalizeDate(a)) / MS_DAY)); }
+
 function accrueDaily(){
   const today = normalizeDate(new Date());
   let changed = false;
 
   employees.forEach(emp=>{
-    // миграция старых данных
-    if(!emp.startDate){
+    if (!emp.startDate) {
       emp.startDate = today.toISOString().slice(0,10);
     }
-    if(typeof emp.autoAccrued !== "number"){
-      // инициализируем без изменения текущего баланса (чтобы не задним числом докидывать)
-      emp.autoAccrued = daysBetween(new Date(emp.startDate), today) * DAILY_RATE;
-      changed = true;
-      return;
+    if (typeof emp.autoAccrued !== "number") {
+      emp.autoAccrued = 0;
+    }
+    if (typeof emp.days !== "number") {
+      emp.days = 0;
     }
 
-    // рассчитываем, сколько должно быть на сегодня
-    const shouldBe = daysBetween(new Date(emp.startDate), today) * DAILY_RATE;
-    const delta = +(shouldBe - emp.autoAccrued).toFixed(6); // фикс мелких двоичных артефактов
+    // Сколько ДОЛЖНО быть автоначислено на сегодня с даты начала
+    const shouldBe = +(daysBetween(new Date(emp.startDate), today) * DAILY_RATE).toFixed(6);
 
-    if (delta !== 0){
-      emp.autoAccrued += delta;
-      emp.days = (emp.days || 0) + delta;
+    // Сколько ещё надо докинуть в баланс и в счётчик автоначисленного
+    const delta = +(shouldBe - emp.autoAccrued).toFixed(6);
+
+    if (delta !== 0) {
+      emp.autoAccrued = +(emp.autoAccrued + delta).toFixed(6);
+      emp.days        = +(emp.days + delta).toFixed(6);
       changed = true;
+    } else {
+      // Миграционный фикс: если из-за прошлой версии days < autoAccrued — дольём разницу
+      if (emp.days + 1e-6 < emp.autoAccrued) {
+        const fix = +(emp.autoAccrued - emp.days).toFixed(6);
+        emp.days = +(emp.days + fix).toFixed(6);
+        changed = true;
+      }
     }
   });
 
-  if(changed) save();
+  if (changed) save();
 }
+
 
 // ====== Рендер ======
 function render(){
