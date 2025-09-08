@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Leave Request System</title>
+  <link rel="stylesheet" href="./style.css"/>
+</head>
+<body>
+  <h1>Leave Request System</h1>
+
+  <!-- Кнопка для админа -->
+  <div class="center mb-20">
+    <button class="btn toggle" id="btnAdmin">Админ</button>
+  </div>
+
+  <!-- Админка -->
+  <div id="adminPanel" class="card" style="display:none;">
+    <h2>Админка</h2>
+
+    <div class="grid-2">
+      <div>
+        <input type="text" id="empName" placeholder="Имя сотрудника" />
+      </div>
+      <div>
+        <button class="btn add" id="btnAddEmp">Добавить сотрудника</button>
+      </div>
+    </div>
+
+    <h3>Сотрудники</h3>
+    <table id="empTable"></table>
+
+    <h3>Заявки</h3>
+    <div class="filter-row">
+      Фильтр:
+      <select id="reqFilter">
+        <option value="all">Все</option>
+        <option value="pending">Только pending</option>
+        <option value="approved">Только approved</option>
+        <option value="rejected">Только rejected</option>
+      </select>
+    </div>
+    <table id="reqTable"></table>
+  </div>
+
+  <!-- Сотрудник -->
+  <div class="card">
+    <h2>Сотрудник</h2>
+    <select id="empSelect"></select>
+    <div class="emp-days" id="empDays"></div>
+
+    <label>Дата начала <input type="date" id="fromDate" /></label>
+    <label>Дата конца <input type="date" id="toDate" /></label>
+    <button class="btn add" id="btnMakeReq">Отправить заявку</button>
+
+    <h3 class="mt-15">Мои заявки</h3>
+    <div class="scroll-160">
+      <table id="empReqTable"></table>
+    </div>
+  </div>
+
+  <!-- Календарь -->
+  <div class="card">
+    <div class="calendar-header">
+      <button class="btn" id="btnPrev">← Назад</button>
+      <h2 id="calendarTitle"></h2>
+      <button class="btn" id="btnNext">Вперёд →</button>
+    </div>
+    <div class="calendar" id="calendar"></div>
+  </div>
+
+  <script src="./app.js" defer></script>
+</body>
+</html>
